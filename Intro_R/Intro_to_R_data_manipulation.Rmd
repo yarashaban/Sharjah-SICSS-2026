@@ -1,0 +1,513 @@
+---
+title: "Intro to R"
+output:
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+  pdf_document:
+    toc: TRUE
+    toc_float: TRUE
+  html_notebook:
+    toc: TRUE
+    code_folding: "none"
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+# Data Manipulation
+
+## 1. Packages
+
+So far, we have covered so-called “base R functions” or “built-in functions”, 
+but R has an active community and sometimes further operations are needed.
+We can use **packages** to expand R's functionality. Packages include additional 
+functions, which we will use heavily in the following section.
+
+### The `tidyverse` package
+
+One of the most influential and widely used package in R is the `tidyverse` package.
+This package includes several other packages, which are key for data manipulation 
+e.g. `dplyr`, `ggplot2`, `stringr`, `readr`, `tidyr`. Installing `tidyverse` is
+essentially a shortcut to installing all these other packages.
+
+Tidyverse offers an alternative way of dealing with data compared to base R syntax.
+Both approaches have strengths and weaknesses.
+Originally, this session was written with a focus on tidyverse but in QM you will 
+primarily learn base R so I will focus on teaching you base R as well, except 
+in cases where it is much more efficient to use tidyverse. I will leave the 
+tidyverse code in the file for you to check out later. In the knitted notebook,
+you can easily switch between tabs showcasing base R and tidyverse syntax.
+
+## 2. Working with packages
+
+### 2.1 Installing packages
+
+To install packages you use the very creative `install.packages()` command in R.
+Note that it is necessary to directly install a package in R.
+This step is only required once.
+
+```{r, eval=FALSE}
+install.packages("tidyverse") # Put the name of the package in "quotation marks" 
+
+```
+
+### 2.2 Loading your packages
+
+While you only need to install a package once, you need to load it every time you 
+open a script. You can do that with the `library()` function in R:
+
+```{r}
+library(tidyverse) # Load installed package (no "quotation marks" needed)
+
+```
+
+It is always important to have an efficient workflow in R.
+Traditional R users load all packages they need at the beginning of their page.
+They just need to go back to the top of the script and load it every time they 
+open the script. This is sufficient for replication materials, where the entire 
+script will be opened and executed. However, this approach is not automated and 
+requires user action: R will display a notification and prompt the user to 
+install required packages via a mouse click. 
+
+There are way more elegant and pragmatic ways to do that (installing and loading 
+packages) and here is an example:
+
+```{r setup,  message=FALSE, warning=FALSE, results='hide'}
+# The next code chunk is quite powerful and useful. First you define which 
+# packages you need for your analysis and assign it to the p_needed object.
+p_needed <-
+  c("tidyverse", "haven")
+
+# Now you check which packages are already installed on your computer.
+# The function installed.packages() returns a vector with all the installed
+# packages.
+packages <- rownames(installed.packages())
+# Then you check which of the packages you need are not installed on your
+# computer yet. Essentially you compare the vector p_needed with the vector
+# packages. The result of this comparison is assigned to p_to_install.
+p_to_install <- p_needed[!(p_needed %in% packages)]
+# If at least one element is in p_to_install you then install those missing
+# packages.
+if (length(p_to_install) > 0) {
+  install.packages(p_to_install)
+}
+# Now that all packages are installed on the computer, you can load them for
+# this project. Additionally the expression returns whether the packages were
+# successfully loaded.
+sapply(p_needed, require, character.only = TRUE)
+```
+
+## 3. Loading Data
+
+### 3.1 File types
+
+The last step, before starting data manipulation is to read data into R.
+There are different types of data structures, I will present you the most frequent
+ones and the codes to read them in:
+
+| File          | File Extension | Command                                  |
+|---------------|----------------|------------------------------------------|
+| **CSV-Files** | .csv           | `read.csv()` (German csv: `read.csv2()`) |
+| **Stata**     | .dta           | `read_dta()`                             |
+| **RData**     | .RData;.rds    | `load()` , `read.rds()`                  |
+
+By default, `read.csv()` identifies commas "," as seperators (to seperate data entries),
+whereas `read.csv2()` identifies semicolons ";" as seperators.
+An alternative to using `read.csv2()` is to explicitly declare the seperator using
+`read.csv(file, sep = ";")`. For further information, consult the documentation 
+in R using the command `?read.csv`.
+
+### 3.2 Example: The International Social Survey Programme
+
+For the following Data manipulation part, we will use the The International Social Survey Programme (ISSP), which is typically conducted in 45 countries around the world and each wave covers one of 12 different social issues. We will be using the waves 2006 and 2016 to look into the relation between income inequality in a country and how much trust people have in promises made by politicians.  
+
+You can freely download ISSP data via their page on the GESIS [website](https://www.gesis.org/en/issp/home) 
+(requires registration and login). Go to the Data Portal and select the round you
+want, in the format you want (preferably `.csv` or `.dta`). 
+
+### 3.3. Loading the data
+
+```{r}
+# By default, the location of the R-project (.Rproj) or script (.R/.Rmd) is also
+# the working directory (wd). 
+
+# If the file is not in the same directory you should specify the path where R 
+# can find the file. It is recommended to declare relative paths, a path relative
+# to the working directory. To declare the path include the folders and the file 
+# name in quotation marks. For example:
+d1 <- read.csv("data/issp_data.csv") # assign the imported data file to an object
+
+# Nowadays, using single forward slashes '/' works for all common operating 
+# systems, incl. Windows and Unix-based systems (macOS, Linux).
+
+# You can use "../" if the file is located in the parent directory of the wd.
+# For example: "../issp_data.csv"
+
+
+# and See the loaded dataset "d1" in the 'Environment'
+head(d1) # Preview of the first entries (6 by default)
+
+```
+
+## 4. Data Manipulation
+
+### 4.0 Before we continue: Pipelines {.tabset .tabset-fade .tabset-pills}
+
+The are two distinct ways to execute successive commands on the same object:
+
+1.    The original base R method is to place the command to be executed first in 
+the center then add other commands on top of it, like an onion: The code is read 
+inverse to the order by which the functions are applied: sqrt() is applied last, 
+mean() is applied first.
+
+2   `margrittr` pipes '%\>%'.
+Pipes in R were originally introduced by the 'magrittr' package (included in dplyr
+and consequently in tidyverse too). In version 4.1.0, R introduced its own native
+version of pipes. With pipes, the code is written (and read) by its order of 
+execution. Mean() is executed first, followed by exp() and sqrt() being executed
+last.
+
+####  Base R (original)
+
+```{r}
+q <- c(6,3,8)
+
+sqrt(exp(mean(q)))  #first you get the mean, then exponential, then sqrt
+
+```
+
+
+#### Margrittr pipes
+
+```{r}
+q %>%         #send q into the mean function
+  mean() %>%  #send the result of the mean into the exp function
+  exp() %>%   #send the result into the sqrt function
+  sqrt()
+
+```
+
+####
+
+Whether to use the original R coding logic or pipes is mostly a matter of taste.
+Base R code (without pipes) can become cumbersome to read the more functions are
+nested into another. 
+
+As a rule of thumb, tidyverse functions are better suited for piping (with %\>%).
+Base R pipes are slightly faster (more efficient) than margrittr pipes.
+
+
+### 4.1 Filtering your data
+
+Often you are not interested in using all your observations and rather want to 
+select some rows based on a certain condition. 
+
+Here is how filtering is done using tidyverse:
+
+```{r filtering tidyverse}
+
+#================================#
+#Filtering for only one condition 
+#================================#
+
+d2 <- d1 %>% #Our dataset 
+  filter(cntry == "PH") #filtering for cases only in Philippines. They use the iso2c code, thus two latters as a shortage. We assign it to a new object called d2 
+
+head(d2) #Lets have a look if everything worked out 
+
+d2 <- d1 %>%  
+  filter(age <= 40) #We only want participants younger than 40
+
+head(d2) #Lets have a look if everything worked out
+
+
+#================================#
+#Filtering for multiple condition 
+#================================#
+
+d2 <- d1 %>% #Our dataset 
+  filter(cntry %in% c("PH", "ZA")) #filtering for cases in Philippines and South Africa.
+
+head(d2) #Lets have a look if everything worked out 
+
+d2 <- d1 %>% #Our dataset 
+  filter(cntry %in% c("PH", "ZA") &
+           age <= 40) #filtering for cases under 40 in Philippines and South Africa.
+
+ #Lets have a look if everything worked out 
+
+head(d2)
+
+
+```
+
+####
+
+Your turn!
+
+Think about a friend and filter the dataset to only include people the same age 
+AND gender AND country as them. The variable names are age, male (1 male, 
+2 female), and cntry (use the unique(d1\$cntry) command to see all the country 
+names in the dataset). Find out the number of rows in the filtered dataset.
+
+```{r}
+
+
+
+
+
+```
+
+### 4.2 Selecting columns
+
+We obviously do not care about all variables a dataset can offer (mostly).
+There are several ways to select the variables (columns) we need.
+This of course depends on our research question.
+
+Here is how you select in tidyverse:
+
+```{r}
+
+# Select the relevant variables we need
+d2 <- d1 %>%
+   select(male, age, trust_promise, edu)
+
+head(d2) #always check
+
+# Of course we can combine the commands 
+
+d2 <- d1 %>%
+  filter(age < 40) %>%
+  select(male, age, trust_promise, edu)
+
+head(d2)
+
+#We can also delete columns from dataset, lets delete `education`
+
+head(d2)
+
+d3 <- d2 %>% 
+  select(-edu) #We delete columns by simply putting a - before it
+
+
+head(d3)
+
+
+```
+
+
+### 4.3 Reordering your dataset {.tabset}
+
+
+Here is how you arrange in tidyverse:
+
+```{r}
+
+#Let us take the code for d7 as example again 
+
+d2 <- d1 %>%
+  filter(age < 40) %>%
+  select(male, age, trust_promise, edu) %>% 
+  arrange(age) # We just use the arrange function and then R sorts the variable
+                # from the lowest to the highest value of age
+
+head(d2)
+
+# What if we want to have it from the highest to the lowest? 
+
+# Let us take the code for d7 as example again 
+
+d2 <- d1 %>%
+  filter(age < 40) %>%
+  select(male, age, trust_promise, edu) %>% 
+  arrange(desc(age)) # We just use the desc() function, where desc means 
+                      # descending in the arrange function and R sorts the 
+                      # variable from the highest to the lowest value of age
+
+head(d2)
+
+```
+
+
+
+### 4.4 renaming and reordering columns
+
+
+Here is how to do it in tidyverse:
+
+```{r}
+#we again take d2s code 
+
+d2 <- d1 %>%
+  filter(age < 40) %>%
+  select(male, age, trust_promise, edu) %>% 
+  arrange(desc(age)) %>%
+  rename(trust = trust_promise, 
+         education = edu, 
+         gender = male) #First you put the new name, equal sign and then you put the old name of the variable 
+
+head(d2)
+
+#===============================#
+
+d2 <- d1 %>%
+  filter(age < 40) %>%
+  select(male, age, trust_promise, edu) %>% 
+  arrange(desc(age)) %>%
+  rename(trust = trust_promise, 
+         education = edu, 
+         gender = male) %>% 
+  relocate(age, education, trust, gender) #determine the order
+
+head(d2)
+
+
+
+```
+
+### 4.5 Recoding and creating new variables {.tabset}
+
+```{r}
+
+#creating a new variable
+
+d2$age_sq <- d2$age^2  #age squared is a usual control term
+```
+
+There are several reasons to recode a variable:
+
+1.  The current coding is counter intuitive.
+
+2.  you might want to convert a continuous variable into categorical. 
+
+3.  missing values are given a code that can confuse our calculations.
+
+
+Here are different ways of recoding:
+
+```{r}
+
+max(d1$trust_promise) #the scale of trust is from 1 to 5, this is a missing value (non-response)
+#if we leave this value like this, R will think this respondent has perfect confidence in politicians
+
+#we need to recode this value into a missing value or NA in R
+
+5 + NA
+
+max(5,NA)
+
+# R can't perform operations on missing values so it won't interfere with our regression
+
+da <- d1 #making a copy of d1
+
+da$trust_promise <- ifelse(da$trust_promise == 99, NA, da$trust_promise)
+max(da$trust_promise) #answer is NA because now all the 999 values are NA's
+max(da$trust_promise, na.rm =T) #tells R to ignore NA's
+
+#use the range() and table() functions to check whether you have unrealistic values
+
+table(da$unemployed)
+
+da$unemployed <- ifelse(da$unemployed == -11, NA, da$unemployed)
+
+#let's recode gender into character
+table(da$male)
+da$male <- ifelse(da$male == 1, "Male", "Female")
+table(da$male) #notice the difference?
+
+
+#count missing data in a column?
+sum(is.na(da$trust_promise))
+
+is.na(c(1,2,3,NA,NA))
+sum(is.na(c(1,2,3,NA,NA)))
+
+
+```
+
+
+
+## 5. Merging Datasets
+
+Sometimes it could be the case that you need variables, which are not in one dataset already available, but in another dataset.
+For this case you load both datasets and **merge** them together.
+**This only works if there is a similar data structure, so know your data**
+
+let's read the macro_data.csv file containing yearly information on Gini coefficient and GDP growth of countries.
+
+```{r}
+
+macro <- read.csv("data/macro_data.csv")
+
+head(macro)
+
+
+
+```
+
+
+To merge data there are important functions from the **dplyr** package: The `left_join()` and the `inner_join()` function.
+
+-   `left_join()`: You want to keep all observations in the first table, including matching observations in the second table.
+    You merging the data from the right table to left table.
+
+-   `inner_join()`: You want to keep only observations that match in both tables
+
+To merge two datasets, you need at least one common variable.
+But most of the time you need two common identifiers.
+Since the datasets are structured by country and year, we will use country and year.
+Since there is only one country and year combination.
+
+```{r}
+
+
+#We want to merge into the World Bank Dataset 
+
+merged_data <- inner_join(da, macro, by = c("country_year")) #You define your first/left table, and then the second/right table comes next. Afterwards you define the common identifiers. 
+
+
+#or this way
+merged_data2 <- inner_join(da, macro, by = c("cntry" = "country_iso", "year" = "year"))
+
+head(merged_data) #Now we need to clean the dataset
+
+#notice that we now have two columns called year.x and year.y?
+
+#both datasets have a column called year, so when merging the datasets you end up with two columns called country and that is not acceptable in R so the join command adds the .x and .y to distinguish the two columns.
+
+#solution is to rename or remove one of the country columns
+
+macro2 <- macro %>%
+            rename(yr = year)
+
+
+#let's merge again and see now:
+merged_data_new <- inner_join(da, macro2, by = c("country_year"))
+
+colnames(merged_data_new) #looks good!
+
+
+```
+
+## Exercise Section:
+
+let's get back to our original question, what is the relation between income inequality in a country (Gini) and the trust that people have in politicians. Let's run a simply linear regression based on the new merged data:
+
+
+
+
+```{r, eval=FALSE}
+
+#linear regression in R follows the following command
+
+#model <- lm(y ~ x1 + x2 + x3, data = dataframe)
+#where y is the dependent variable, and x1:3 are the independent variables
+
+#don't forget to add country fixed effects!
+
+#you can use the summary() command to check the regression results
+
+
+
+```
