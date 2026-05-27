@@ -1,0 +1,269 @@
+```{r setup, message=FALSE, warning=FALSE, results='hide'}
+
+p_needed <-
+  c("tidyverse", "haven", "MASS", "sjPlot")
+
+packages <- rownames(installed.packages())
+
+p_to_install <- p_needed[!(p_needed %in% packages)]
+
+if (length(p_to_install) > 0) {
+  install.packages(p_to_install)
+}
+
+sapply(p_needed, require, character.only = TRUE)
+
+
+```
+
+
+```{r}
+
+d1 <- read.csv("issp_2016_jp.csv")
+
+m1 <- lm(inc_jp ~ edu, data = d1)
+m2 <- lm(inc_jp ~ edu + female, data = d1)
+
+```
+
+
+```{r}
+
+
+# plot(jitter(d1$edu, factor = 1), jitter(d1$inc_jp, factor = 1),
+#      col = ifelse(d1$female ==1, alpha("blue",0.4),
+#                   alpha("red",0.4)), pch = 19 ,
+#      ylab = "Income", xlab = "Years of Education")
+
+plot(jitter(d1$edu, factor = 1), jitter(d1$inc_jp, factor = 1),
+     col = alpha("black",0.4), pch = 19 ,
+     ylab = "Income", xlab = "Years of Education")
+
+abline(a = coef(m1)[1], b = coef(m1)[2], lwd = 3)
+
+abline(a = coef(m2)[1], b = coef(m2)[2], lwd = 3, col = "red")
+abline(a = coef(m2)[1] + coef(m2)[3], b = coef(m2)[2], lwd = 3, col = "blue")
+
+
+legend("topleft", c("Male", "Female"),
+        pch = 19, col = c("red", "blue"), cex = 0.95)
+
+
+
+```
+
+
+
+
+## Step 1 - Get the regression coefficients.
+
+```{r step-1-get-the-regression-coefficients}
+beta_hat <- coef(m2)
+```
+
+## Step 2 - Generate sampling distribution. 
+
+### Step 2.1. Get the variance-covariance matrix.  
+
+```{r step-2-1-get-the-variance-covariance-matrix}
+V_hat <- vcov(m2) 
+
+```
+
+### Step 2.2. Draw from the multivariate normal distribution. 
+
+```{r step-2-2-draw-from-the-multivariate-normal-distribution}
+
+# Set the number of draws/simulations.
+
+nsim <- 1000 
+
+# Draw from the multivariate normal distribution to get S.
+
+S <- mvrnorm(nsim, beta_hat, V_hat)
+
+dim(S) # Check dimensions
+
+```
+
+## Step 3 - Set a scenario. 
+
+Tip: double-check the ordering of coefficients first, to put the values in the correct order.
+
+```{r step-3-set-a-scenario}
+names(beta_hat)
+edu_seq <- c(8:20)  
+scenario_female <- cbind(1, edu_seq, 1) 
+scenario_male <- cbind(1, edu_seq, 0)
+
+```
+ 
+## Step 4 - Calculate Expected Values 
+
+```{r expected-values}
+
+#EV_female <- S %*% as.matrix(X_female)  
+
+EV_female <- S %*% t(scenario_female)  
+
+# %*% is the operator for matrix multiplication
+
+EV_male <- S %*% t(scenario_male)
+
+quants_mean_fun <-  function(x) {
+  c(quants = quantile(x, probs = c(0.025, 0.975)),
+    mean = mean(x))
+}
+
+# Quantiles, we again use apply and our quants.mean.fun
+quants_female <- apply(EV_female, 2, quants_mean_fun)
+quants_male <- apply(EV_male, 2, quants_mean_fun)
+
+
+```
+
+
+
+## Step 5 - Summarize Results
+
+```{r summarize-result-base-r-2}
+plot(
+  d1$edu,
+  d1$inc_jp,
+  pch = 19,
+  cex.axis = 0.8,
+  cex.lab = 0.8,
+  bty = "n",
+  las = 1,
+ # ylim = c(0, 35),
+  ylab = "Income",
+  xlab = "Years of Education",
+  type = "n"
+)
+
+points(jitter(d1$edu, factor = 1), jitter(d1$inc_jp, factor = 1),
+      col = ifelse(d1$female ==1, alpha("blue",0.4),
+                   alpha("red",0.4)), pch = 19 ,
+      ylab = "Income", xlab = "Years of Education")
+
+polygon(
+  x = c(edu_seq, rev(edu_seq)),
+  y = c(quants_female[1 ,], rev(quants_female[2 ,])),
+  col =  alpha("blue",0.2),
+  border = NA
+)
+polygon(
+  x = c(edu_seq, rev(edu_seq)),
+  y = c(quants_male[1 ,], rev(quants_male[2 ,])),
+  col = alpha("red",0.2),
+  border = NA
+)
+
+
+lines(edu_seq, quants_female[3,], col = "blue", lwd = 2)
+
+lines(edu_seq, quants_male[3,],
+     col = "red", lwd = 2)
+
+# Add a legend
+
+legend("topleft", c("Male", "Female"),
+        pch = 19, col = c("red", "blue"), cex = 0.95)
+
+
+```
+
+
+
+
+###using fake data for a more equal Japan
+
+
+```{r}
+
+
+#create more equal income
+
+d1$inc_jp_equal <- ifelse(d1$female == 1, d1$inc_jp + 1900, d1$inc_jp)
+
+
+m3 <- lm(inc_jp_equal ~ edu + female, data = d1)
+
+```
+
+
+
+```{r simulations equal}
+beta_hat <- coef(m3)
+
+V_hat <- vcov(m3) 
+
+nsim <- 1000 
+
+S <- mvrnorm(nsim, beta_hat, V_hat)
+
+dim(S) # Check dimensions
+
+edu_seq <- c(8:20)  
+scenario_female <- cbind(1, edu_seq, 1) 
+scenario_male <- cbind(1, edu_seq, 0)
+
+
+EV_female <- S %*% t(scenario_female)  
+EV_male <- S %*% t(scenario_male)
+
+quants_female <- apply(EV_female, 2, quants_mean_fun)
+quants_male <- apply(EV_male, 2, quants_mean_fun)
+
+
+```
+
+
+
+```{r results equal}
+plot(
+  d1$edu,
+  d1$inc_jp_equal,
+  pch = 19,
+  cex.axis = 0.8,
+  cex.lab = 0.8,
+  bty = "n",
+  las = 1,
+ # ylim = c(0, 7000),
+  ylab = "Income",
+  xlab = "Years of Education",
+  type = "n"
+)
+
+ points(jitter(d1$edu, factor = 1), jitter(d1$inc_jp_equal, factor = 1),
+       col = ifelse(d1$female ==1, alpha("blue",0.4),
+                    alpha("red",0.4)), pch = 19 ,
+       ylab = "Income", xlab = "Years of Education")
+
+polygon(
+  x = c(edu_seq, rev(edu_seq)),
+  y = c(quants_female[1 ,], rev(quants_female[2 ,])),
+  col =  alpha("blue",0.2),
+  border = NA
+)
+polygon(
+  x = c(edu_seq, rev(edu_seq)),
+  y = c(quants_male[1 ,], rev(quants_male[2 ,])),
+  col = alpha("red",0.2),
+  border = NA
+)
+
+
+lines(edu_seq, quants_female[3,], col = "blue", lwd = 2)
+
+lines(edu_seq, quants_male[3,],
+     col = "red", lwd = 2)
+
+# Add a legend
+
+legend("topleft", c("Male", "Female"),
+        pch = 19, col = c("red", "blue"), cex = 0.95)
+
+
+```
+
